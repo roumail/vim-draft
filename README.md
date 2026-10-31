@@ -1,9 +1,7 @@
 # vim-draft
 
-A buffer to write text in before it goes somewhere, for roumail's Vim plugins
-([vim-review](https://github.com/roumail/vim-review)'s `:CommentDraft`,
-[vim-prompts](https://github.com/roumail/vim-prompts)'s `:AiDraft`). It works
-as a git commit message:
+A buffer to write text in before it goes somewhere, opened by other plugins.
+It works as a git commit message:
 
 | | |
 | --- | --- |
