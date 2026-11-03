@@ -16,6 +16,11 @@ function! roumail_draft#open(name, lines, OnClose, ...) abort
     autocmd QuitPre <buffer> call s:keep_vim()
     autocmd BufWipeout <buffer> call s:close(getbufvar(str2nr(expand('<abuf>')), 'roumail_draft'))
   augroup END
+  normal! G$
+  " Takes effect once the caller has set the draft up
+  if get(g:, 'roumail_draft_insert', 0)
+    startinsert!
+  endif
 endfunction
 
 function! s:save() abort

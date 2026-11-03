@@ -18,6 +18,14 @@ last window (after `:only`), the buffer it was opened from opens beside it.
 Plug 'roumail/vim-draft'
 ```
 
+## Settings
+
+Every draft opens the same way, in normal mode at the end of its text:
+
+```vim
+let g:roumail_draft_insert = 1   " start in insert mode there instead
+```
+
 ## Use
 
 ```vim
@@ -29,8 +37,8 @@ call roumail_draft#open('my-plugin://note', ['first line'],
 `roumail_draft#open(name, lines, OnClose [, opts])` opens the draft named
 `name` (with `/<bufnr>` added when a buffer has that name), starting with
 `lines`, and leaves it the current buffer, to set its filetype, folds or
-statusline. Once it closes with text saved, `OnClose(text)` gets that text
-without the blank lines around it.
+statusline, with the cursor at the end of its last line. Once it closes with
+text saved, `OnClose(text)` gets that text without the blank lines around it.
 
 | Option | Default |
 | --- | --- |
