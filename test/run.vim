@@ -191,8 +191,16 @@ function! s:test_save_draft_outside_git() abort
   execute 'edit' fnameescape(s:tmp . '/outside.txt')
   call s:draft(['x'])
   DraftSave
-  call assert_equal(1, len(s:saves(l:dir)))
+  call assert_equal(1, len(s:saves(l:dir . '/vim-draft')))
+  DraftList
+  call assert_equal(['x'], map(getloclist(0), 'v:val.text'))
+  lclose
   call delete(l:dir, 'rf')
+endfunction
+
+function! s:test_dir() abort
+  call assert_equal('/repo/.git/my-plugin/x', roumail_draft#dir('/repo/.git', 'my-plugin/x'))
+  call assert_equal(g:roumail_draft_save_dir . '/my-plugin/x', roumail_draft#dir('', 'my-plugin/x'))
 endfunction
 
 function! s:test_save_elsewhere_fails() abort

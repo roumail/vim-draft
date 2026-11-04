@@ -55,17 +55,19 @@ when it closes, and a scratch is still dropped when it closes.
 | none, saved before | The file it was last saved to. |
 | none | A new file, named for the time, in the save directory. |
 
-The save directory of a draft is `vim-draft/` in the git directory of the
-repository the draft was opened from (the one shared by all its work trees,
-so saves outlive a work tree and are never committed). For a scratch, or a
-draft opened outside a repository, it is `g:roumail_draft_save_dir`. Files
-end in `.md` when the buffer is markdown, else `.txt`.
+The save directory of a scratch is `g:roumail_draft_save_dir`. That of a
+draft is `vim-draft/` in the git directory of the repository it was opened
+from (the one shared by all its work trees, so saves outlive a work tree and
+are never committed), as for a plugin's files (see
+[`roumail_draft#dir()`](#for-other-plugins)): outside a repository,
+`vim-draft/` in `g:roumail_draft_save_dir`. Files end in `.md` when the buffer
+is markdown, else `.txt`.
 
 ## Settings
 
 | Variable | Default |
 | --- | --- |
-| `g:roumail_draft_save_dir` | `~/scratch` |
+| `g:roumail_draft_save_dir` | `~/scratch`: saved scratches, and what plugins keep outside a repository |
 | `g:roumail_draft_insert` | `0`: a draft opens in normal mode at the end of its text; `1` starts in insert mode there. |
 
 ## For other plugins
@@ -92,6 +94,13 @@ The plugin that opens a draft sets what is its own on the buffer afterwards:
 its `filetype`, its buffer variables and its `statusline`. The rest is
 vim-draft's: `buftype`, `bufhidden`, the draft's autocommands and
 `b:roumail_draft`, which a plugin neither sets nor reads.
+
+A plugin that keeps files (saves, prompts) asks vim-draft where:
+`roumail_draft#dir(git_dir, name)` is `<git_dir>/<name>`, or
+`<g:roumail_draft_save_dir>/<name>` when `git_dir` is empty, outside a
+repository. The plugin says which git dir it means (a work tree's own, which
+goes with the work tree, or the common one) and names its directory after
+itself, e.g. `roumail_draft#dir(FugitiveGitDir(), 'my-plugin/notes')`.
 
 ## Tests
 

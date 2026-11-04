@@ -99,16 +99,23 @@ function! s:new_file(dir) abort
   return l:path
 endfunction
 
-" A draft goes in the repository of the buffer it was opened from; a
-" scratch, or a draft from outside a repository, in g:roumail_draft_save_dir
-function! s:save_dir(draft) abort
-  let l:repo = a:draft.kind ==# 'draft' ? s:repo_dir(a:draft.from) : ''
-  return empty(l:repo) ? g:roumail_draft_save_dir : l:repo
+" Where a plugin keeps its files: name in the git dir it gives, else in
+" g:roumail_draft_save_dir, so what is kept outside a repository is in one
+" place whichever plugin keeps it
+function! roumail_draft#dir(git_dir, name) abort
+  return (empty(a:git_dir) ? g:roumail_draft_save_dir : a:git_dir) . '/' . a:name
 endfunction
 
-" In the git dir shared by all work trees, so saves outlive the work tree
-" and are never committed
-function! s:repo_dir(bufnr) abort
+" A scratch is saved in g:roumail_draft_save_dir; a draft, as a plugin's
+" files are, in the repository of the buffer it was opened from
+function! s:save_dir(draft) abort
+  return a:draft.kind ==# 'draft' ? roumail_draft#dir(s:git_dir(a:draft.from), 'vim-draft')
+        \ : g:roumail_draft_save_dir
+endfunction
+
+" The git dir shared by all work trees, so saves outlive the work tree and
+" are never committed
+function! s:git_dir(bufnr) abort
   let l:name = bufname(a:bufnr)
   let l:dir = empty(l:name) || !empty(getbufvar(a:bufnr, '&buftype'))
         \ ? getcwd() : fnamemodify(l:name, ':p:h')
@@ -117,15 +124,16 @@ function! s:repo_dir(bufnr) abort
   endif
   let l:out = systemlist('git -C ' . shellescape(l:dir)
         \ . ' rev-parse --path-format=absolute --git-common-dir')
-  return v:shell_error || empty(l:out) ? '' : l:out[0] . '/vim-draft'
+  return v:shell_error || empty(l:out) ? '' : l:out[0]
 endfunction
 
-" Saved files of this repository and of g:roumail_draft_save_dir, newest
-" first, in the location list
+" Saved drafts of this repository, and saved scratches and drafts of
+" g:roumail_draft_save_dir, newest first, in the location list
 function! roumail_draft#list() abort
   let l:draft = get(b:, 'roumail_draft', {})
-  let l:repo = s:repo_dir(get(l:draft, 'kind', '') ==# 'draft' ? l:draft.from : bufnr())
-  let l:dirs = uniq([l:repo, g:roumail_draft_save_dir])
+  let l:git_dir = s:git_dir(get(l:draft, 'kind', '') ==# 'draft' ? l:draft.from : bufnr())
+  let l:dirs = uniq(sort([roumail_draft#dir(l:git_dir, 'vim-draft'), g:roumail_draft_save_dir,
+        \ roumail_draft#dir('', 'vim-draft')]))
   let l:files = []
   for l:dir in filter(l:dirs, '!empty(v:val)')
     call extend(l:files, filter(glob(l:dir . '/*', 1, 1), 'filereadable(v:val)'))
