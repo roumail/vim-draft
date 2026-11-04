@@ -12,7 +12,13 @@ it was.
 
 ## Install
 
+Requires [vim-fugitive](https://github.com/tpope/vim-fugitive), which finds
+the git directory. With [vim-requires](https://github.com/roumail/vim-requires),
+Vim shows `vim-draft: requires …` at startup when it isn't loaded.
+
 ```vim
+Plug 'tpope/vim-fugitive'
+Plug 'roumail/vim-requires'  " optional: the startup warning
 Plug 'roumail/vim-draft'
 ```
 
@@ -55,19 +61,18 @@ when it closes, and a scratch is still dropped when it closes.
 | none, saved before | The file it was last saved to. |
 | none | A new file, named for the time, in the save directory. |
 
-The save directory of a scratch is `g:roumail_draft_save_dir`. That of a
-draft is `vim-draft/` in the git directory of the repository it was opened
-from (the one shared by all its work trees, so saves outlive a work tree and
-are never committed), as for a plugin's files (see
-[`roumail_draft#dir()`](#for-other-plugins)): outside a repository,
-`vim-draft/` in `g:roumail_draft_save_dir`. Files end in `.md` when the buffer
+The save directory of a scratch is `g:roumail_draft_save_dir`, or, when it
+isn't set, `vim-draft/` in the XDG state directory. That of a draft is
+`vim-draft/` where plugins keep their files (see
+[`roumail_draft#dir()`](#for-other-plugins)): the git directory of the
+repository it was opened from, else outside a repository. Files end in `.md` when the buffer
 is markdown, else `.txt`.
 
 ## Settings
 
 | Variable | Default |
 | --- | --- |
-| `g:roumail_draft_save_dir` | `~/scratch`: saved scratches, and what plugins keep outside a repository |
+| `g:roumail_draft_save_dir` | Unset: saved scratches, and what plugins keep outside a repository, go in the XDG state directory (`$XDG_STATE_HOME`, else `~/.local/state`). Set it, e.g. to `~/scratch`, to keep them there. |
 | `g:roumail_draft_insert` | `0`: a draft opens in normal mode at the end of its text; `1` starts in insert mode there. |
 
 ## For other plugins
@@ -95,12 +100,24 @@ its `filetype`, its buffer variables and its `statusline`. The rest is
 vim-draft's: `buftype`, `bufhidden`, the draft's autocommands and
 `b:roumail_draft`, which a plugin neither sets nor reads.
 
-A plugin that keeps files (saves, prompts) asks vim-draft where:
-`roumail_draft#dir(git_dir, name)` is `<git_dir>/<name>`, or
-`<g:roumail_draft_save_dir>/<name>` when `git_dir` is empty, outside a
-repository. The plugin says which git dir it means (a work tree's own, which
-goes with the work tree, or the common one) and names its directory after
-itself, e.g. `roumail_draft#dir(FugitiveGitDir(), 'my-plugin/notes')`.
+A plugin that keeps files (saves, prompts) asks vim-draft where, and finds
+no git dir and picks no directory of its own:
+`roumail_draft#dir(name [, opts])` returns the directory, created if
+missing, the first of:
+
+1. `<git dir>/<name>` in a git repository, found by vim-fugitive: the git
+   dir shared by all work trees, so the files outlive a work tree and are
+   never committed.
+2. `<g:roumail_draft_save_dir>/<name>` outside a repository, when it is set.
+3. `<$XDG_STATE_HOME>/<name>` (`~/.local/state/<name>`) otherwise.
+
+| Option | Default |
+| --- | --- |
+| `bufnr` | The current buffer: whose repository it is. A buffer that isn't a file (a list, a draft) is in the current directory's. |
+| `worktree` | `0`. `1`: the work tree's own git dir, which git removes with the work tree, for files of no use after it. |
+
+A plugin names its directory after itself, e.g.
+`roumail_draft#dir('my-plugin/notes', {'worktree': 1})`.
 
 ## Tests
 

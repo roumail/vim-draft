@@ -6,9 +6,16 @@ if exists('g:loaded_roumail_draft')
 endif
 let g:loaded_roumail_draft = 1
 
-" Where a scratch, or a draft from outside a git repository, is saved when
-" :DraftSave is given no path
-let g:roumail_draft_save_dir = get(g:, 'roumail_draft_save_dir', expand('~/scratch'))
+" roumail/vim-requires is optional
+try
+  call roumail_requires#check('vim-draft', {
+        \ 'tpope/vim-fugitive': 'g:loaded_fugitive',
+        \ })
+catch /^Vim\%((\a\+)\)\=:E117:/
+endtry
+
+" g:roumail_draft_save_dir: where scratches, and what plugins keep outside a
+" repository, are saved. Unset: the XDG state directory (roumail_draft#dir)
 
 " New scratch in a vertical split (!: in the current window)
 command! -bang Scratch call roumail_draft#scratch#new(<bang>0)

@@ -4,13 +4,21 @@
 " in the environment runs the tests whose names match.
 set nocompatible hidden
 execute 'set runtimepath^=' . fnameescape(expand('<sfile>:p:h:h'))
-" Only this plugin: Vim's own ones aren't all quiet in silent Ex mode
+" Only this plugin and fugitive, which finds git dirs for it ($FUGITIVE,
+" else vim-plug's copy): Vim's own ones aren't all quiet in silent Ex mode
+let s:fugitive = empty($FUGITIVE) ? expand('~/.vim/plugged/vim-fugitive') : $FUGITIVE
+execute 'set runtimepath^=' . fnameescape(s:fugitive)
+execute 'source' fnameescape(s:fugitive . '/plugin/fugitive.vim')
 execute 'source' fnameescape(expand('<sfile>:p:h:h') . '/plugin/roumail_draft.vim')
 filetype on
 
 let s:tmp = resolve(tempname())
 call mkdir(s:tmp . '/repo', 'p')
 call system('git -C ' . shellescape(s:tmp . '/repo') . ' init -q')
+call system('git -C ' . shellescape(s:tmp . '/repo') . ' -c user.name=t -c user.email=t@t'
+      \ . ' commit -q --allow-empty -m init')
+call system('git -C ' . shellescape(s:tmp . '/repo') . ' worktree add -q '
+      \ . shellescape(s:tmp . '/linked'))
 let g:roumail_draft_save_dir = s:tmp . '/saves'
 let s:sent = []
 let s:out = []
@@ -199,8 +207,39 @@ function! s:test_save_draft_outside_git() abort
 endfunction
 
 function! s:test_dir() abort
-  call assert_equal('/repo/.git/my-plugin/x', roumail_draft#dir('/repo/.git', 'my-plugin/x'))
-  call assert_equal(g:roumail_draft_save_dir . '/my-plugin/x', roumail_draft#dir('', 'my-plugin/x'))
+  let l:git = s:tmp . '/repo/.git'
+  execute 'edit' fnameescape(s:tmp . '/repo/file.txt')
+  call assert_equal(l:git . '/my-plugin/x', roumail_draft#dir('my-plugin/x'))
+  call assert_true(isdirectory(l:git . '/my-plugin/x'))
+  " A linked work tree: the common git dir, else its own
+  execute 'edit' fnameescape(s:tmp . '/linked/file.txt')
+  call assert_equal(l:git . '/p', roumail_draft#dir('p'))
+  call assert_equal(l:git . '/worktrees/linked/p', roumail_draft#dir('p', {'worktree': 1}))
+  " Another buffer's repository
+  let l:linked = bufnr()
+  execute 'edit' fnameescape(s:tmp . '/outside.txt')
+  call assert_equal(l:git . '/worktrees/linked/q', roumail_draft#dir('q', {'bufnr': l:linked, 'worktree': 1}))
+  " Outside a repository
+  call assert_equal(g:roumail_draft_save_dir . '/my-plugin/x', roumail_draft#dir('my-plugin/x'))
+  call delete(g:roumail_draft_save_dir, 'rf')
+endfunction
+
+function! s:test_dir_xdg() abort
+  let l:saved = [g:roumail_draft_save_dir, $XDG_STATE_HOME]
+  unlet g:roumail_draft_save_dir
+  let $XDG_STATE_HOME = s:tmp . '/state'
+  try
+    execute 'edit' fnameescape(s:tmp . '/outside.txt')
+    call assert_equal(s:tmp . '/state/my-plugin', roumail_draft#dir('my-plugin'))
+    call assert_true(isdirectory(s:tmp . '/state/my-plugin'))
+    Scratch!
+    call setline(1, ['x'])
+    DraftSave
+    call assert_equal(1, len(s:saves(s:tmp . '/state/vim-draft')))
+  finally
+    let [g:roumail_draft_save_dir, $XDG_STATE_HOME] = l:saved
+    call delete(s:tmp . '/state', 'rf')
+  endtry
 endfunction
 
 function! s:test_save_elsewhere_fails() abort
