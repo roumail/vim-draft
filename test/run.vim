@@ -19,6 +19,7 @@ call system('git -C ' . shellescape(s:tmp . '/repo') . ' -c user.name=t -c user.
       \ . ' commit -q --allow-empty -m init')
 call system('git -C ' . shellescape(s:tmp . '/repo') . ' worktree add -q '
       \ . shellescape(s:tmp . '/linked'))
+call mkdir(s:tmp . '/plain/sub', 'p')
 let g:roumail_draft_save_dir = s:tmp . '/saves'
 let s:sent = []
 let s:out = []
@@ -31,6 +32,12 @@ function! s:reset() abort
   let s:sent = []
   silent! only!
   silent! %bwipeout!
+  execute 'cd' fnameescape(s:tmp . '/plain')
+endfunction
+
+" What vim-draft names a directory outside a repository by
+function! s:place(dir) abort
+  return fnamemodify(a:dir, ':t') . '-' . sha256(a:dir)[:7]
 endfunction
 
 function! s:draft(...) abort
@@ -199,10 +206,15 @@ function! s:test_save_draft_outside_git() abort
   execute 'edit' fnameescape(s:tmp . '/outside.txt')
   call s:draft(['x'])
   DraftSave
-  call assert_equal(1, len(s:saves(l:dir . '/vim-draft')))
+  call assert_equal(1, len(s:saves(l:dir . '/' . s:place(s:tmp . '/plain') . '/vim-draft')))
   DraftList
   call assert_equal(['x'], map(getloclist(0), 'v:val.text'))
   lclose
+  " Another directory's drafts are its own
+  call setloclist(0, [])
+  cd sub
+  silent DraftList
+  call assert_equal([], getloclist(0))
   call delete(l:dir, 'rf')
 endfunction
 
@@ -219,8 +231,12 @@ function! s:test_dir() abort
   let l:linked = bufnr()
   execute 'edit' fnameescape(s:tmp . '/outside.txt')
   call assert_equal(l:git . '/worktrees/linked/q', roumail_draft#dir('q', {'bufnr': l:linked, 'worktree': 1}))
-  " Outside a repository
-  call assert_equal(g:roumail_draft_save_dir . '/my-plugin/x', roumail_draft#dir('my-plugin/x'))
+  " Outside a repository: one directory per current directory
+  call assert_equal(g:roumail_draft_save_dir . '/' . s:place(s:tmp . '/plain') . '/my-plugin/x',
+        \ roumail_draft#dir('my-plugin/x'))
+  cd sub
+  call assert_equal(g:roumail_draft_save_dir . '/' . s:place(s:tmp . '/plain/sub') . '/my-plugin/x',
+        \ roumail_draft#dir('my-plugin/x'))
   call delete(g:roumail_draft_save_dir, 'rf')
 endfunction
 
@@ -230,8 +246,9 @@ function! s:test_dir_xdg() abort
   let $XDG_STATE_HOME = s:tmp . '/state'
   try
     execute 'edit' fnameescape(s:tmp . '/outside.txt')
-    call assert_equal(s:tmp . '/state/my-plugin', roumail_draft#dir('my-plugin'))
-    call assert_true(isdirectory(s:tmp . '/state/my-plugin'))
+    let l:dir = s:tmp . '/state/' . s:place(s:tmp . '/plain') . '/my-plugin'
+    call assert_equal(l:dir, roumail_draft#dir('my-plugin'))
+    call assert_true(isdirectory(l:dir))
     Scratch!
     call setline(1, ['x'])
     DraftSave
@@ -240,6 +257,20 @@ function! s:test_dir_xdg() abort
     let [g:roumail_draft_save_dir, $XDG_STATE_HOME] = l:saved
     call delete(s:tmp . '/state', 'rf')
   endtry
+endfunction
+
+function! s:test_place() abort
+  execute 'edit' fnameescape(s:tmp . '/repo/file.txt')
+  call assert_equal({'dir': s:tmp . '/repo', 'repo': 1}, roumail_draft#place())
+  execute 'edit' fnameescape(s:tmp . '/linked/file.txt')
+  call assert_equal({'dir': s:tmp . '/linked', 'repo': 1}, roumail_draft#place())
+  let l:linked = bufnr()
+  execute 'edit' fnameescape(s:tmp . '/outside.txt')
+  call assert_equal({'dir': s:tmp . '/linked', 'repo': 1}, roumail_draft#place(l:linked))
+  call assert_equal({'dir': s:tmp . '/plain', 'repo': 0}, roumail_draft#place())
+  " Outside a repository, the current directory's, if it is in one
+  execute 'cd' fnameescape(s:tmp . '/repo')
+  call assert_equal({'dir': s:tmp . '/repo', 'repo': 1}, roumail_draft#place())
 endfunction
 
 function! s:test_save_elsewhere_fails() abort

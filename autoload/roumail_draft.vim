@@ -111,7 +111,12 @@ endfunction
 function! roumail_draft#dir(name, ...) abort
   let l:opts = get(a:, 1, {})
   let l:git_dir = s:git_dir(get(l:opts, 'bufnr', -1), get(l:opts, 'worktree', 0))
-  let l:dir = (empty(l:git_dir) ? s:outside() : l:git_dir) . '/' . a:name
+  if empty(l:git_dir)
+    " Each directory's files apart, as a repository's are in its git dir
+    let l:place = roumail_draft#place(get(l:opts, 'bufnr', bufnr())).dir
+    let l:git_dir = s:outside() . '/' . fnamemodify(l:place, ':t') . '-' . sha256(l:place)[:7]
+  endif
+  let l:dir = l:git_dir . '/' . a:name
   call mkdir(l:dir, 'p')
   return l:dir
 endfunction
@@ -141,6 +146,18 @@ function! s:scratch_dir() abort
   return l:dir
 endfunction
 
+" The work tree of the buffer's repository, else of the current directory's,
+" else the current directory
+function! roumail_draft#place(...) abort
+  for l:gitdir in [FugitiveGitDir(get(a:, 1, bufnr())), FugitiveExtractGitDir(getcwd())]
+    let l:tree = empty(l:gitdir) ? '' : FugitiveWorkTree(l:gitdir)
+    if !empty(l:tree)
+      return {'dir': l:tree, 'repo': 1}
+    endif
+  endfor
+  return {'dir': getcwd(), 'repo': 0}
+endfunction
+
 " Found by fugitive: the buffer's, else, for a buffer that isn't a file,
 " the current directory's
 function! s:git_dir(bufnr, worktree) abort
@@ -155,13 +172,12 @@ function! s:git_dir(bufnr, worktree) abort
   return empty(l:dir) || a:worktree ? l:dir : FugitiveCommonDir(l:dir)
 endfunction
 
-" Saved drafts of this repository, and saved scratches and drafts from
-" outside a repository, newest first, in the location list
+" Saved drafts of this repository or directory, and saved scratches, newest
+" first, in the location list
 function! roumail_draft#list() abort
   let l:draft = get(b:, 'roumail_draft', {})
   let l:from = get(l:draft, 'kind', '') ==# 'draft' ? l:draft.from : bufnr()
-  let l:dirs = uniq(sort([roumail_draft#dir('vim-draft', {'bufnr': l:from}),
-        \ s:scratch_dir(), s:outside() . '/vim-draft']))
+  let l:dirs = uniq(sort([roumail_draft#dir('vim-draft', {'bufnr': l:from}), s:scratch_dir()]))
   let l:files = []
   for l:dir in filter(l:dirs, '!empty(v:val)')
     call extend(l:files, filter(glob(l:dir . '/*', 1, 1), 'filereadable(v:val)'))

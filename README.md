@@ -30,7 +30,7 @@ Plug 'roumail/vim-draft'
 | `:ScratchFrom {cmd}` | Scratch in the current window with the output of a shell command. |
 | `:[range]ScratchBuf[!] [buffer\|file]` | Copy a buffer (or the range of the current one), or a file that isn't open, into a new scratch, keeping its filetype. |
 | `:DraftSave[!] [path\|dir/]` | Write the draft or scratch, as it is now, to a file. See [Saving](#saving). |
-| `:DraftList` | Saved files of the current repository and of the save directory, newest first, in the location list (each with its first line). |
+| `:DraftList` | Saved drafts of the current repository, or outside one of the current directory, and saved scratches, newest first, in the location list (each with its first line). |
 
 `:ScratchFrom` pairs well with the quickfix list: `:ScratchFrom rg --vimgrep pattern`,
 trim the lines, then `:cgetbuffer`.
@@ -65,7 +65,8 @@ The save directory of a scratch is `g:roumail_draft_save_dir`, or, when it
 isn't set, `vim-draft/` in the XDG state directory. That of a draft is
 `vim-draft/` where plugins keep their files (see
 [`roumail_draft#dir()`](#for-other-plugins)): the git directory of the
-repository it was opened from, else outside a repository. Files end in `.md` when the buffer
+repository it was opened from, else outside a repository, for the current
+directory. Files end in `.md` when the buffer
 is markdown, else `.txt`.
 
 ## Settings
@@ -108,8 +109,20 @@ missing, the first of:
 1. `<git dir>/<name>` in a git repository, found by vim-fugitive: the git
    dir shared by all work trees, so the files outlive a work tree and are
    never committed.
-2. `<g:roumail_draft_save_dir>/<name>` outside a repository, when it is set.
-3. `<$XDG_STATE_HOME>/<name>` (`~/.local/state/<name>`) otherwise.
+2. `<g:roumail_draft_save_dir>/<place>/<name>` outside a repository, when it
+   is set.
+3. `<$XDG_STATE_HOME>/<place>/<name>` (`~/.local/state/<place>/<name>`)
+   otherwise.
+
+Outside a repository, `<place>` keeps each directory's files apart, as a
+repository's git dir does: the current directory's name and a short hash of
+its path, e.g. `notes-1a2b3c4d`.
+
+`roumail_draft#place([bufnr])` is where a plugin is working, as
+`{dir, repo}`: the work tree of the buffer's repository (default: the
+current buffer), else of the current directory's, with `repo` 1; else the
+current directory, with `repo` 0. Paths a plugin shows or keeps are relative
+to `dir`.
 
 | Option | Default |
 | --- | --- |
