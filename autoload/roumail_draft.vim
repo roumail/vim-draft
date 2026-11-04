@@ -8,8 +8,8 @@ function! roumail_draft#open(name, lines, OnClose, ...) abort
   execute 'silent file' fnameescape(bufexists(a:name) ? a:name . '/' . bufnr() : a:name)
   call setline(1, a:lines)
   setlocal nomodified
-  let b:roumail_draft = {'text': '', 'OnClose': a:OnClose, 'from': l:from,
-        \ 'saved': l:opts.saved, 'empty': l:opts.empty}
+  let b:roumail_draft = {'kind': 'draft', 'path': '', 'text': '', 'OnClose': a:OnClose,
+        \ 'from': l:from, 'saved': l:opts.saved, 'empty': l:opts.empty}
   augroup roumail_draft
     autocmd! * <buffer>
     autocmd BufWriteCmd <buffer> call s:save()
@@ -51,4 +51,93 @@ function! s:close(draft) abort
     return
   endif
   call a:draft.OnClose(a:draft.text)
+endfunction
+
+" Writes the text as it is now to a file, leaving the buffer as it was: a
+" draft still hands on what :w last saved when it closes
+function! roumail_draft#save(bang, arg) abort
+  let l:draft = get(b:, 'roumail_draft', {})
+  if empty(l:draft)
+    echoerr 'DraftSave: not a draft or a scratch'
+    return
+  endif
+  let l:path = s:target(l:draft, a:arg)
+  if filereadable(l:path) && !a:bang && l:path !=# l:draft.path
+    echoerr 'DraftSave: ' . fnamemodify(l:path, ':~') . ' exists (add ! to overwrite)'
+    return
+  endif
+  call mkdir(fnamemodify(l:path, ':h'), 'p')
+  if writefile(getline(1, '$'), l:path) != 0
+    echoerr 'DraftSave: cannot write ' . fnamemodify(l:path, ':~')
+    return
+  endif
+  let l:draft.path = l:path
+  echo 'DraftSave: wrote ' . fnamemodify(l:path, ':~')
+endfunction
+
+" The file last written, unless the argument names another file or a
+" directory to write a new one in
+function! s:target(draft, arg) abort
+  if empty(a:arg)
+    return empty(a:draft.path) ? s:new_file(s:save_dir(a:draft)) : a:draft.path
+  endif
+  let l:path = fnamemodify(a:arg =~# '^[~$]' ? expand(a:arg) : a:arg, ':p')
+  return isdirectory(l:path) || l:path =~# '/$'
+        \ ? s:new_file(substitute(l:path, '/\+$', '', '')) : l:path
+endfunction
+
+" Named for the time, so they sort
+function! s:new_file(dir) abort
+  let l:base = a:dir . '/' . strftime('%Y%m%d-%H%M%S')
+  let l:ext = &filetype ==# 'markdown' ? '.md' : '.txt'
+  let l:path = l:base . l:ext
+  let l:n = 1
+  while filereadable(l:path)
+    let l:n += 1
+    let l:path = l:base . '-' . l:n . l:ext
+  endwhile
+  return l:path
+endfunction
+
+" A draft goes in the repository of the buffer it was opened from; a
+" scratch, or a draft from outside a repository, in g:roumail_draft_save_dir
+function! s:save_dir(draft) abort
+  let l:repo = a:draft.kind ==# 'draft' ? s:repo_dir(a:draft.from) : ''
+  return empty(l:repo) ? g:roumail_draft_save_dir : l:repo
+endfunction
+
+" In the git dir shared by all work trees, so saves outlive the work tree
+" and are never committed
+function! s:repo_dir(bufnr) abort
+  let l:name = bufname(a:bufnr)
+  let l:dir = empty(l:name) || !empty(getbufvar(a:bufnr, '&buftype'))
+        \ ? getcwd() : fnamemodify(l:name, ':p:h')
+  if !isdirectory(l:dir)
+    let l:dir = getcwd()
+  endif
+  let l:out = systemlist('git -C ' . shellescape(l:dir)
+        \ . ' rev-parse --path-format=absolute --git-common-dir')
+  return v:shell_error || empty(l:out) ? '' : l:out[0] . '/vim-draft'
+endfunction
+
+" Saved files of this repository and of g:roumail_draft_save_dir, newest
+" first, in the location list
+function! roumail_draft#list() abort
+  let l:draft = get(b:, 'roumail_draft', {})
+  let l:repo = s:repo_dir(get(l:draft, 'kind', '') ==# 'draft' ? l:draft.from : bufnr())
+  let l:dirs = uniq([l:repo, g:roumail_draft_save_dir])
+  let l:files = []
+  for l:dir in filter(l:dirs, '!empty(v:val)')
+    call extend(l:files, filter(glob(l:dir . '/*', 1, 1), 'filereadable(v:val)'))
+  endfor
+  if empty(l:files)
+    echo 'DraftList: nothing saved in ' . join(map(l:dirs, 'fnamemodify(v:val, ":~")'), ' or ')
+    return
+  endif
+  call sort(l:files, {a, b -> getftime(b) - getftime(a)})
+  call setloclist(0, [], ' ', {
+        \ 'title': 'DraftList',
+        \ 'items': map(l:files, '{"filename": v:val, "lnum": 1, "text": get(readfile(v:val, "", 1), 0, "")}'),
+        \ })
+  lopen
 endfunction

@@ -1,0 +1,244 @@
+" Headless tests, from the repository's root:
+"   vim -Nu NONE -i NONE -Es -S test/run.vim
+" Prints one line per test and exits non-zero when one fails; TEST=<pattern>
+" in the environment runs the tests whose names match.
+set nocompatible hidden
+execute 'set runtimepath^=' . fnameescape(expand('<sfile>:p:h:h'))
+" Only this plugin: Vim's own ones aren't all quiet in silent Ex mode
+execute 'source' fnameescape(expand('<sfile>:p:h:h') . '/plugin/roumail_draft.vim')
+filetype on
+
+let s:tmp = resolve(tempname())
+call mkdir(s:tmp . '/repo', 'p')
+call system('git -C ' . shellescape(s:tmp . '/repo') . ' init -q')
+let g:roumail_draft_save_dir = s:tmp . '/saves'
+let s:sent = []
+let s:out = []
+
+function! s:Send(text) abort
+  call add(s:sent, a:text)
+endfunction
+
+function! s:reset() abort
+  let s:sent = []
+  silent! only!
+  silent! %bwipeout!
+endfunction
+
+function! s:draft(...) abort
+  call roumail_draft#open('test://draft', get(a:, 1, ['one', 'two']), function('s:Send'))
+endfunction
+
+" assert_fails() makes vim -Es exit non-zero even when it passes
+function! s:fails(cmd, pattern) abort
+  try
+    execute a:cmd
+    call assert_report(a:cmd . ': no error')
+  catch
+    call assert_match(a:pattern, v:exception)
+  endtry
+endfunction
+
+function! s:saves(dir) abort
+  return sort(glob(a:dir . '/*', 1, 1))
+endfunction
+
+" Drafts
+
+function! s:test_open() abort
+  call s:draft()
+  call assert_equal('test://draft', bufname())
+  call assert_equal('acwrite', &buftype)
+  call assert_equal(['one', 'two'], getline(1, '$'))
+  call assert_equal([2, 3], [line('.'), col('.')])
+  call assert_equal(2, winnr('$'))
+  call assert_false(&modified)
+endfunction
+
+function! s:test_wq_sends_saved_text() abort
+  call s:draft([])
+  call setline(1, ['', 'hello', 'world', '', ''])
+  write
+  call append('$', 'not saved')
+  quit!
+  call assert_equal(["hello\nworld"], s:sent)
+  call assert_equal(1, winnr('$'))
+endfunction
+
+function! s:test_quit_before_write_drops() abort
+  call s:draft()
+  quit!
+  call assert_equal([], s:sent)
+endfunction
+
+function! s:test_empty_sends_nothing() abort
+  call s:draft([' ', ''])
+  wq
+  call assert_equal([], s:sent)
+endfunction
+
+function! s:test_unique_name() abort
+  call s:draft()
+  let l:first = bufnr()
+  call s:draft()
+  call assert_equal('test://draft/' . bufnr(), bufname())
+  call assert_notequal(l:first, bufnr())
+endfunction
+
+function! s:test_last_window_keeps_vim() abort
+  call s:draft()
+  write
+  only
+  quit
+  " Still running: the buffer it was opened from took the window
+  call assert_equal(["one\ntwo"], s:sent)
+  call assert_equal(1, winnr('$'))
+endfunction
+
+" Scratches
+
+function! s:test_scratch() abort
+  Scratch
+  call assert_equal(2, winnr('$'))
+  call assert_equal('scratch1', bufname())
+  call assert_equal(['nofile', 'wipe'], [&buftype, &bufhidden])
+  Scratch
+  call assert_equal(3, winnr('$'))
+  call assert_equal('scratch2', bufname())
+  Scratch!
+  call assert_equal(3, winnr('$'))
+endfunction
+
+function! s:test_scratch_from() abort
+  ScratchFrom printf 'a\nb\n'
+  call assert_equal(['a', 'b'], getline(1, '$'))
+  call assert_equal('nofile', &buftype)
+endfunction
+
+function! s:test_scratch_buf_range() abort
+  call setline(1, ['x', 'y', 'z'])
+  setfiletype python
+  2,3ScratchBuf
+  call assert_equal(['y', 'z'], getline(1, '$'))
+  call assert_equal('python', &filetype)
+  call assert_equal('nofile', &buftype)
+endfunction
+
+function! s:test_scratch_buf_file() abort
+  call writefile(['# title'], s:tmp . '/notes.md')
+  execute 'ScratchBuf!' fnameescape(s:tmp . '/notes.md')
+  call assert_equal(['# title'], getline(1, '$'))
+  call assert_equal('markdown', &filetype)
+  call assert_equal(1, winnr('$'))
+endfunction
+
+" Saving
+
+function! s:test_save_scratch() abort
+  let l:dir = g:roumail_draft_save_dir
+  Scratch!
+  call setline(1, ['kept'])
+  DraftSave
+  let l:files = s:saves(l:dir)
+  call assert_equal(1, len(l:files))
+  call assert_match('/\d\{8}-\d\{6}\.txt$', get(l:files, 0, ''))
+  call assert_equal(['kept'], readfile(get(l:files, 0, '/nonexistent')))
+  " Still a scratch, and saving again updates the same file
+  call assert_equal('nofile', &buftype)
+  call setline(1, ['kept again'])
+  DraftSave
+  call assert_equal(l:files, s:saves(l:dir))
+  call assert_equal(['kept again'], readfile(l:files[0]))
+  call delete(l:dir, 'rf')
+endfunction
+
+function! s:test_save_to_dir_and_path() abort
+  Scratch!
+  setfiletype markdown
+  call setline(1, ['x'])
+  execute 'DraftSave' fnameescape(s:tmp . '/kept/')
+  call assert_match('/kept/\d\{8}-\d\{6}\.md$', get(s:saves(s:tmp . '/kept'), 0, ''))
+  execute 'DraftSave' fnameescape(s:tmp . '/named.md')
+  call assert_equal(['x'], readfile(s:tmp . '/named.md'))
+  " Another buffer's file isn't overwritten without !
+  Scratch!
+  call setline(1, ['y'])
+  call s:fails('DraftSave ' . fnameescape(s:tmp . '/named.md'), 'exists')
+  call assert_equal(['x'], readfile(s:tmp . '/named.md'))
+  execute 'DraftSave!' fnameescape(s:tmp . '/named.md')
+  call assert_equal(['y'], readfile(s:tmp . '/named.md'))
+endfunction
+
+function! s:test_save_draft_keeps_sending() abort
+  execute 'edit' fnameescape(s:tmp . '/repo/file.txt')
+  call s:draft(['reply'])
+  setfiletype markdown
+  call setline(1, ['reply, edited'])
+  DraftSave
+  let l:files = s:saves(s:tmp . '/repo/.git/vim-draft')
+  call assert_equal(1, len(l:files))
+  call assert_match('\.md$', get(l:files, 0, ''))
+  call assert_equal(['reply, edited'], readfile(get(l:files, 0, '/nonexistent')))
+  " Saving left the draft as it was: still to :w, and :wq sends
+  call assert_equal('acwrite', &buftype)
+  call assert_true(&modified)
+  wq
+  call assert_equal(['reply, edited'], s:sent)
+endfunction
+
+function! s:test_save_draft_outside_git() abort
+  let l:dir = g:roumail_draft_save_dir
+  execute 'edit' fnameescape(s:tmp . '/outside.txt')
+  call s:draft(['x'])
+  DraftSave
+  call assert_equal(1, len(s:saves(l:dir)))
+  call delete(l:dir, 'rf')
+endfunction
+
+function! s:test_save_elsewhere_fails() abort
+  call s:fails('DraftSave', 'not a draft or a scratch')
+endfunction
+
+function! s:test_list() abort
+  call mkdir(g:roumail_draft_save_dir, 'p')
+  call writefile(['older'], g:roumail_draft_save_dir . '/a.txt')
+  call writefile(['newer'], g:roumail_draft_save_dir . '/b.txt')
+  call system('touch -t 202001010000 ' . shellescape(g:roumail_draft_save_dir . '/a.txt'))
+  DraftList
+  call assert_equal(['newer', 'older'], map(getloclist(0), 'v:val.text'))
+  lclose
+  call delete(g:roumail_draft_save_dir, 'rf')
+endfunction
+
+let s:failed = 0
+let s:prefix = expand('<SID>') . 'test_'
+let s:names = []
+for s:line in split(execute('function'), "\n")
+  if stridx(s:line, 'function ' . s:prefix) == 0
+    call add(s:names, matchstr(s:line, '^function \zs[^(]\+'))
+  endif
+endfor
+for s:name in s:names
+  let s:label = matchstr(s:name, 'test_\zs\w\+')
+  if !empty($TEST) && s:label !~# $TEST
+    continue
+  endif
+  call s:reset()
+  let v:errors = []
+  try
+    call call(s:name, [])
+  catch
+    call add(v:errors, v:exception . ' @ ' . v:throwpoint)
+  endtry
+  if empty(v:errors)
+    call add(s:out, 'ok   ' . s:label)
+  else
+    let s:failed += 1
+    call add(s:out, 'FAIL ' . s:label)
+    call extend(s:out, map(copy(v:errors), '"     " . v:val'))
+  endif
+endfor
+call add(s:out, s:failed ? s:failed . ' failed' : 'all passed')
+call writefile(s:out, '/dev/stdout')
+call delete(s:tmp, 'rf')
+execute 'cquit' (s:failed ? 1 : 0)
