@@ -13,12 +13,10 @@ it was.
 ## Install
 
 Requires [vim-fugitive](https://github.com/tpope/vim-fugitive), which finds
-the git directory. With [vim-requires](https://github.com/roumail/vim-requires),
-Vim shows `vim-draft: requires …` at startup when it isn't loaded.
+the git directory.
 
 ```vim
 Plug 'tpope/vim-fugitive'
-Plug 'roumail/vim-requires'  " optional: the startup warning
 Plug 'roumail/vim-draft'
 ```
 

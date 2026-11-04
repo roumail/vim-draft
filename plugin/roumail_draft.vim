@@ -6,14 +6,6 @@ if exists('g:loaded_roumail_draft')
 endif
 let g:loaded_roumail_draft = 1
 
-" roumail/vim-requires is optional
-try
-  call roumail_requires#check('vim-draft', {
-        \ 'tpope/vim-fugitive': 'g:loaded_fugitive',
-        \ })
-catch /^Vim\%((\a\+)\)\=:E117:/
-endtry
-
 " g:roumail_draft_save_dir: where scratches, and what plugins keep outside a
 " repository, are saved. Unset: the XDG state directory (roumail_draft#dir)
 
