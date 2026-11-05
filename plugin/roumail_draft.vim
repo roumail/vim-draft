@@ -6,8 +6,8 @@ if exists('g:loaded_roumail_draft')
 endif
 let g:loaded_roumail_draft = 1
 
-" g:roumail_draft_save_dir: where scratches, and what plugins keep outside a
-" repository, are saved. Unset: the XDG state directory (roumail_draft#dir)
+" g:roumail_draft_save_dir: where scratches are saved. Unset: vim-draft/ in
+" the XDG state directory. Drafts are saved where vim-place keeps files
 
 " New scratch in a vertical split (!: in the current window)
 command! -bang Scratch call roumail_draft#scratch#new(<bang>0)

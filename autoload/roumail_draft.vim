@@ -62,6 +62,9 @@ function! roumail_draft#save(bang, arg) abort
     return
   endif
   let l:path = s:target(l:draft, a:arg)
+  if empty(l:path)
+    return
+  endif
   if filereadable(l:path) && !a:bang && l:path !=# l:draft.path
     echoerr 'DraftSave: ' . fnamemodify(l:path, ':~') . ' exists (add ! to overwrite)'
     return
@@ -79,6 +82,9 @@ endfunction
 " directory to write a new one in
 function! s:target(draft, arg) abort
   if empty(a:arg)
+    if empty(a:draft.path) && a:draft.kind ==# 'draft' && !s:requires(':DraftSave of a draft')
+      return ''
+    endif
     return empty(a:draft.path) ? s:new_file(s:save_dir(a:draft)) : a:draft.path
   endif
   let l:path = fnamemodify(a:arg =~# '^[~$]' ? expand(a:arg) : a:arg, ':p')
@@ -99,85 +105,31 @@ function! s:new_file(dir) abort
   return l:path
 endfunction
 
-" Where a plugin keeps its files, named name: in the git dir of the
-" repository, else in g:roumail_draft_save_dir, else in the XDG state
-" directory, so every plugin keeps its files the same way. The directory is
-" created. opts:
-"   bufnr     whose repository (default: the current buffer's, else the
-"             current directory's)
-"   worktree  1: the work tree's own git dir, which git removes with the work
-"             tree, for files of no use after it (default: the git dir shared
-"             by all work trees, so files outlive the work tree)
-function! roumail_draft#dir(name, ...) abort
-  let l:opts = get(a:, 1, {})
-  let l:git_dir = s:git_dir(get(l:opts, 'bufnr', -1), get(l:opts, 'worktree', 0))
-  if empty(l:git_dir)
-    " Each directory's files apart, as a repository's are in its git dir
-    let l:place = roumail_draft#place(get(l:opts, 'bufnr', bufnr())).dir
-    let l:git_dir = s:outside() . '/' . fnamemodify(l:place, ':t') . '-' . sha256(l:place)[:7]
-  endif
-  let l:dir = l:git_dir . '/' . a:name
-  call mkdir(l:dir, 'p')
-  return l:dir
-endfunction
-
-" Where files go outside a repository
-function! s:outside() abort
-  let l:dir = get(g:, 'roumail_draft_save_dir', '')
-  if !empty(l:dir)
-    return expand(l:dir)
-  endif
-  return (empty($XDG_STATE_HOME) ? expand('~/.local/state') : $XDG_STATE_HOME)
-endfunction
-
 " A scratch is saved outside any repository; a draft, as a plugin's files
 " are, in the repository of the buffer it was opened from
 function! s:save_dir(draft) abort
-  return a:draft.kind ==# 'draft' ? roumail_draft#dir('vim-draft', {'bufnr': a:draft.from})
+  return a:draft.kind ==# 'draft' ? roumail_place#dir('vim-draft', {'bufnr': a:draft.from})
         \ : s:scratch_dir()
 endfunction
 
 " g:roumail_draft_save_dir itself when it is set, so scratches are files of
 " yours; else vim-draft's XDG state directory
 function! s:scratch_dir() abort
-  let l:dir = empty(get(g:, 'roumail_draft_save_dir', ''))
-        \ ? s:outside() . '/vim-draft' : expand(g:roumail_draft_save_dir)
+  let l:dir = !empty(get(g:, 'roumail_draft_save_dir', '')) ? expand(g:roumail_draft_save_dir)
+        \ : (empty($XDG_STATE_HOME) ? expand('~/.local/state') : $XDG_STATE_HOME) . '/vim-draft'
   call mkdir(l:dir, 'p')
   return l:dir
-endfunction
-
-" The work tree of the buffer's repository, else of the current directory's,
-" else the current directory
-function! roumail_draft#place(...) abort
-  for l:gitdir in [FugitiveGitDir(get(a:, 1, bufnr())), FugitiveExtractGitDir(getcwd())]
-    let l:tree = empty(l:gitdir) ? '' : FugitiveWorkTree(l:gitdir)
-    if !empty(l:tree)
-      return {'dir': l:tree, 'repo': 1}
-    endif
-  endfor
-  return {'dir': getcwd(), 'repo': 0}
-endfunction
-
-" Found by fugitive: the buffer's, else, for a buffer that isn't a file,
-" the current directory's
-function! s:git_dir(bufnr, worktree) abort
-  let l:bufnr = a:bufnr < 0 ? bufnr() : a:bufnr
-  let l:dir = a:bufnr < 0 ? FugitiveGitDir() : FugitiveGitDir(l:bufnr)
-  if empty(l:dir)
-    " Fugitive sets a buffer's git dir once it is current: else by its path
-    let l:file = empty(bufname(l:bufnr)) || !empty(getbufvar(l:bufnr, '&buftype'))
-          \ ? getcwd() : fnamemodify(bufname(l:bufnr), ':p')
-    let l:dir = FugitiveExtractGitDir(l:file)
-  endif
-  return empty(l:dir) || a:worktree ? l:dir : FugitiveCommonDir(l:dir)
 endfunction
 
 " Saved drafts of this repository or directory, and saved scratches, newest
 " first, in the location list
 function! roumail_draft#list() abort
+  if !s:requires(':DraftList')
+    return
+  endif
   let l:draft = get(b:, 'roumail_draft', {})
   let l:from = get(l:draft, 'kind', '') ==# 'draft' ? l:draft.from : bufnr()
-  let l:dirs = uniq(sort([roumail_draft#dir('vim-draft', {'bufnr': l:from}), s:scratch_dir()]))
+  let l:dirs = uniq(sort([roumail_place#dir('vim-draft', {'bufnr': l:from}), s:scratch_dir()]))
   let l:files = []
   for l:dir in filter(l:dirs, '!empty(v:val)')
     call extend(l:files, filter(glob(l:dir . '/*', 1, 1), 'filereadable(v:val)'))
@@ -192,4 +144,16 @@ function! roumail_draft#list() abort
         \ 'items': map(l:files, '{"filename": v:val, "lnum": 1, "text": get(readfile(v:val, "", 1), 0, "")}'),
         \ })
   lopen
+endfunction
+
+" vim-place keeps drafts per repository: what needs it says so when it isn't
+" installed
+function! s:requires(what) abort
+  if !empty(globpath(&runtimepath, 'autoload/roumail_place.vim', 1))
+    return 1
+  endif
+  echohl ErrorMsg
+  echomsg 'vim-draft: ' . a:what . ' needs vim-place (with vim-fugitive), which is not installed'
+  echohl None
+  return 0
 endfunction
