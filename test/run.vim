@@ -114,6 +114,25 @@ function! s:test_last_window_keeps_vim() abort
   call assert_equal(1, winnr('$'))
 endfunction
 
+function! s:Fail(text) abort
+  throw 'network down'
+endfunction
+
+function! s:test_failed_hand_on_keeps_text() abort
+  let l:dir = s:tmp . '/repo/.git/vim-draft'
+  execute 'edit' fnameescape(s:tmp . '/repo/file.txt')
+  call roumail_draft#open('test://draft', ['reply'], function('s:Fail'))
+  setfiletype markdown
+  call setline(1, ['reply', 'second line'])
+  write
+  call s:fails('quit', 'handing on failed (network down); text kept in .*/vim-draft/\d\{8}-\d\{6}\.md$')
+  call assert_false(bufexists('test://draft'))
+  let l:files = s:saves(l:dir)
+  call assert_equal(1, len(l:files))
+  call assert_equal(['reply', 'second line'], readfile(get(l:files, 0, '/nonexistent')))
+  call delete(l:dir, 'rf')
+endfunction
+
 " Scratches
 
 function! s:test_scratch() abort

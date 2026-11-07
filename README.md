@@ -62,6 +62,10 @@ It works as a git commit message:
 Closing a draft never quits Vim, which would lose the text: when it is the
 last window (after `:only`), the buffer it was opened from opens beside it.
 
+When the plugin fails to take the text it is handed, the text is kept in a
+new file where `:DraftSave` would put it (in the unnamed register if it
+can't be written), and the error says where.
+
 ## Saving
 
 `:DraftSave` writes the buffer's text as it is now, `:w` or not, to a file

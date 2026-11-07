@@ -14,7 +14,7 @@ function! roumail_draft#open(name, lines, OnClose, ...) abort
     autocmd! * <buffer>
     autocmd BufWriteCmd <buffer> call s:save()
     autocmd QuitPre <buffer> call s:keep_vim()
-    autocmd BufWipeout <buffer> call s:close(getbufvar(str2nr(expand('<abuf>')), 'roumail_draft'))
+    autocmd BufWipeout <buffer> call s:close(str2nr(expand('<abuf>')))
   augroup END
   normal! G$
   " Takes effect once the caller has set the draft up
@@ -46,11 +46,34 @@ function! s:keep_vim() abort
   wincmd p
 endfunction
 
-function! s:close(draft) abort
-  if empty(a:draft) || empty(a:draft.text)
+function! s:close(bufnr) abort
+  let l:draft = getbufvar(a:bufnr, 'roumail_draft')
+  if empty(l:draft) || empty(l:draft.text)
     return
   endif
-  call a:draft.OnClose(a:draft.text)
+  try
+    call l:draft.OnClose(l:draft.text)
+  catch
+    " The buffer is gone: its text would be too
+    throw 'vim-draft: handing on failed (' . v:exception . '); '
+          \ . s:keep(l:draft, getbufvar(a:bufnr, '&filetype'))
+  endtry
+endfunction
+
+" Writes the text a draft failed to hand on to a new file where :DraftSave
+" would, else to the unnamed register, and says where
+function! s:keep(draft, filetype) abort
+  try
+    let l:dir = !empty(globpath(&runtimepath, 'autoload/roumail_place.vim', 1))
+          \ ? roumail_place#dir('vim-draft', {'bufnr': a:draft.from}) : s:scratch_dir()
+    let l:path = s:new_file(l:dir, a:filetype)
+    if writefile(split(a:draft.text, "\n", 1), l:path) == 0
+      return 'text kept in ' . fnamemodify(l:path, ':~')
+    endif
+  catch
+  endtry
+  call setreg('"', a:draft.text, 'l')
+  return 'text kept in the unnamed register'
 endfunction
 
 " Writes the text as it is now to a file, leaving the buffer as it was: a
@@ -85,17 +108,17 @@ function! s:target(draft, arg) abort
     if empty(a:draft.path) && a:draft.kind !=# 'scratch' && !s:requires(':DraftSave of a draft')
       return ''
     endif
-    return empty(a:draft.path) ? s:new_file(s:save_dir(a:draft)) : a:draft.path
+    return empty(a:draft.path) ? s:new_file(s:save_dir(a:draft), &filetype) : a:draft.path
   endif
   let l:path = fnamemodify(a:arg =~# '^[~$]' ? expand(a:arg) : a:arg, ':p')
   return isdirectory(l:path) || l:path =~# '/$'
-        \ ? s:new_file(substitute(l:path, '/\+$', '', '')) : l:path
+        \ ? s:new_file(substitute(l:path, '/\+$', '', ''), &filetype) : l:path
 endfunction
 
 " Named for the time, so they sort
-function! s:new_file(dir) abort
+function! s:new_file(dir, filetype) abort
   let l:base = a:dir . '/' . strftime('%Y%m%d-%H%M%S')
-  let l:ext = &filetype ==# 'markdown' ? '.md' : '.txt'
+  let l:ext = a:filetype ==# 'markdown' ? '.md' : '.txt'
   let l:path = l:base . l:ext
   let l:n = 1
   while filereadable(l:path)
