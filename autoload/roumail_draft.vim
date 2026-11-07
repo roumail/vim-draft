@@ -54,13 +54,13 @@ function! s:close(draft) abort
 endfunction
 
 " Writes the text as it is now to a file, leaving the buffer as it was: a
-" draft still hands on what :w last saved when it closes
+" draft still hands on what :w last saved when it closes. Any other buffer
+" is saved as a draft opened from itself
 function! roumail_draft#save(bang, arg) abort
-  let l:draft = get(b:, 'roumail_draft', {})
-  if empty(l:draft)
-    echoerr 'DraftSave: not a draft or a scratch'
-    return
+  if !exists('b:roumail_draft')
+    let b:roumail_draft = {'kind': 'buffer', 'path': '', 'from': bufnr()}
   endif
+  let l:draft = b:roumail_draft
   let l:path = s:target(l:draft, a:arg)
   if empty(l:path)
     return
@@ -82,7 +82,7 @@ endfunction
 " directory to write a new one in
 function! s:target(draft, arg) abort
   if empty(a:arg)
-    if empty(a:draft.path) && a:draft.kind ==# 'draft' && !s:requires(':DraftSave of a draft')
+    if empty(a:draft.path) && a:draft.kind !=# 'scratch' && !s:requires(':DraftSave of a draft')
       return ''
     endif
     return empty(a:draft.path) ? s:new_file(s:save_dir(a:draft)) : a:draft.path
@@ -108,8 +108,8 @@ endfunction
 " A scratch is saved outside any repository; a draft, as a plugin's files
 " are, in the repository of the buffer it was opened from
 function! s:save_dir(draft) abort
-  return a:draft.kind ==# 'draft' ? roumail_place#dir('vim-draft', {'bufnr': a:draft.from})
-        \ : s:scratch_dir()
+  return a:draft.kind ==# 'scratch' ? s:scratch_dir()
+        \ : roumail_place#dir('vim-draft', {'bufnr': a:draft.from})
 endfunction
 
 " g:roumail_draft_save_dir itself when it is set, so scratches are files of

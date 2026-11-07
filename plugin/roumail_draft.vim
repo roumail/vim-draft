@@ -23,9 +23,10 @@ command! -nargs=+ -complete=customlist,roumail_draft#scratch#complete_from Scrat
 command! -bang -range=% -nargs=? -complete=customlist,roumail_draft#scratch#complete_buf ScratchBuf
       \ call roumail_draft#scratch#buf(<bang>0, <line1>, <line2>, <q-args>)
 
-" Write the draft or scratch to a file, which it stays apart from: the given
-" path, a new timestamped file in the given directory, else the file it was
-" last saved to, else a new one in the save directory
+" Write the buffer to a file, which it stays apart from, as a draft unless
+" it is a scratch: the given path, a new timestamped file in the given
+" directory, else the file it was last saved to, else a new one in the save
+" directory
 command! -bang -nargs=? -complete=file DraftSave call roumail_draft#save(<bang>0, <q-args>)
 
 " Saved files of the current repository and g:roumail_draft_save_dir, newest

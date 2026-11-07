@@ -237,8 +237,23 @@ function! s:test_save_scratch_xdg() abort
   endtry
 endfunction
 
-function! s:test_save_elsewhere_fails() abort
-  call s:fails('DraftSave', 'not a draft or a scratch')
+function! s:test_save_other_buffer_in_repository() abort
+  let l:dir = s:tmp . '/repo/.git/vim-draft'
+  execute 'cd' fnameescape(s:tmp . '/repo')
+  new
+  setlocal buftype=nofile bufhidden=hide noswapfile
+  silent file ai-oneoff://question
+  call setline(1, ['answer'])
+  DraftSave
+  let l:files = s:saves(l:dir)
+  call assert_equal(1, len(l:files))
+  call assert_equal(['answer'], readfile(get(l:files, 0, '/nonexistent')))
+  call setline(1, ['answer again'])
+  DraftSave
+  call assert_equal(l:files, s:saves(l:dir))
+  call assert_equal(['answer again'], readfile(l:files[0]))
+  call assert_equal([], s:saves(g:roumail_draft_save_dir))
+  call delete(l:dir, 'rf')
 endfunction
 
 function! s:test_list() abort

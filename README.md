@@ -7,8 +7,8 @@ Buffers to write text in that aren't files:
 - A **scratch** is opened by you and has nowhere to send its text: closing it
   drops it.
 
-Either can be written to a file with `:DraftSave`, which leaves the buffer as
-it was.
+`:DraftSave` writes either to a file and leaves the buffer as it was. In any
+other buffer, such as a plugin's output, it saves the text as a draft.
 
 ## Install
 
@@ -19,14 +19,14 @@ Plug 'roumail/vim-draft'
 ```
 
 That gives you drafts for other plugins, the scratch commands, and
-`:DraftSave` of a scratch, or of anything to a path or directory you give.
+`:DraftSave` of a scratch, or of any buffer to a path or directory you give.
 
 Each row below adds a module on top of the core, and **Needs** is the whole
 set of plugins it takes besides the core:
 
 | Needs | Module | Adds |
 | --- | --- | --- |
-| [vim-place](https://github.com/roumail/vim-place) + [vim-fugitive](https://github.com/tpope/vim-fugitive) | Drafts kept per repository | `:DraftSave` of a draft without a path, into the repository it was opened from; `:DraftList` |
+| [vim-place](https://github.com/roumail/vim-place) + [vim-fugitive](https://github.com/tpope/vim-fugitive) | Drafts kept per repository | `:DraftSave` without a path of a draft, into the repository it was opened from, or of any other buffer but a scratch, into its own; `:DraftList` |
 
 All of it:
 
@@ -43,7 +43,7 @@ Plug 'roumail/vim-draft'
 | `:Scratch[!]` | New scratch in a vertical split (`!`: in the current window). |
 | `:ScratchFrom {cmd}` | Scratch in the current window with the output of a shell command. |
 | `:[range]ScratchBuf[!] [buffer\|file]` | Copy a buffer (or the range of the current one), or a file that isn't open, into a new scratch, keeping its filetype. |
-| `:DraftSave[!] [path\|dir/]` | Write the draft or scratch, as it is now, to a file. See [Saving](#saving). |
+| `:DraftSave[!] [path\|dir/]` | Write the buffer, as it is now, to a file: a scratch as a scratch, any other buffer as a draft. See [Saving](#saving). |
 | `:DraftList` | Saved drafts of the current repository, or outside one of the current directory, and saved scratches, newest first, in the location list (each with its first line). |
 
 `:ScratchFrom` pairs well with the quickfix list: `:ScratchFrom rg --vimgrep pattern`,
@@ -66,7 +66,8 @@ last window (after `:only`), the buffer it was opened from opens beside it.
 
 `:DraftSave` writes the buffer's text as it is now, `:w` or not, to a file
 and leaves the buffer as it was: a draft still hands on what `:w` last saved
-when it closes, and a scratch is still dropped when it closes.
+when it closes, and a scratch is still dropped when it closes. Any other
+buffer, such as a plugin's output, is saved as a draft opened from itself.
 
 | Argument | Written to |
 | --- | --- |
@@ -78,8 +79,9 @@ when it closes, and a scratch is still dropped when it closes.
 The save directory of a scratch is `g:roumail_draft_save_dir`, or, when it
 isn't set, `vim-draft/` in the XDG state directory. That of a draft is
 `vim-draft/` where [vim-place](https://github.com/roumail/vim-place) keeps
-plugins' files: the git directory of the repository it was opened from, else
-outside a repository, for the current directory. Files end in `.md` when the
+plugins' files: the git directory of the repository it was opened from (for
+a buffer that isn't a file, the current directory's), else outside a
+repository, for the current directory. Files end in `.md` when the
 buffer is markdown, else `.txt`.
 
 ## Settings
